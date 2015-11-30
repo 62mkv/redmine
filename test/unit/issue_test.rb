@@ -1690,6 +1690,35 @@ class IssueTest < ActiveSupport::TestCase
     assert closed_statuses.empty?
   end
 
+def test_blocks_or_precedes_with_parent
+    issue1 = Issue.generate!
+    issue2 = Issue.generate!
+    issue3 = Issue.generate!
+    issue4 = Issue.generate!
+     
+    IssueRelation.create!(:issue_from => issue1, :issue_to => issue2, :relation_type => IssueRelation::TYPE_PRECEDES)
+    issue2.parent_issue_id = issue3.id
+    issue2.save
+    IssueRelation.create!(:issue_from => issue3, :issue_to => issue4, :relation_type => IssueRelation::TYPE_BLOCKS)
+    
+    assert issue1.blocks_or_precedes?(issue2), "issue1 should be blocking/preceding issue2" 
+    assert issue1.blocks_or_precedes?(issue3), "issue1 should be blocking/preceding issue3" 
+    assert issue1.blocks_or_precedes?(issue4), "issue1 should be blocking/preceding issue4" 
+    
+    assert !issue2.blocks_or_precedes?(issue1), "issue2 should NOT be blocking/preceding issue1" 
+    assert issue2.blocks_or_precedes?(issue3), "issue2 should be blocking/preceding issue3" 
+    assert issue2.blocks_or_precedes?(issue4), "issue2 should be blocking/preceding issue4" 
+    
+    assert !issue3.blocks_or_precedes?(issue1), "issue3 should NOT be blocking/preceding issue1" 
+    assert !issue3.blocks_or_precedes?(issue2), "issue3 should NOT be blocking/preceding issue2" 
+    assert issue3.blocks_or_precedes?(issue4), "issue3 should be blocking/preceding issue4" 
+
+    assert !issue4.blocks_or_precedes?(issue1), "issue4 should be blocking/preceding issue1" 
+    assert !issue4.blocks_or_precedes?(issue2), "issue4 should be blocking/preceding issue2" 
+    assert !issue4.blocks_or_precedes?(issue3), "issue4 should be blocking/preceding issue3" 
+      
+  end
+  
   def test_unblocked_issues_allow_closed_statuses
     blocking_issue = Issue.find(10)
 
@@ -1848,19 +1877,21 @@ class IssueTest < ActiveSupport::TestCase
     end
   end
 
-  def test_setting_parent_to_a_dependent_issue_should_not_validate
+  # this is to make sure that Defect #13654 is Solved
+  def test_setting_parent_to_a_parent_of_related_issue_should_validate
     set_language_if_valid 'en'
     issue1 = Issue.generate!
     issue2 = Issue.generate!
+    issue2.parent_issue_id = issue1.id
+    issue2.save!
     issue3 = Issue.generate!
-    IssueRelation.create!(:issue_from => issue1, :issue_to => issue2, :relation_type => IssueRelation::TYPE_PRECEDES)
-    IssueRelation.create!(:issue_from => issue3, :issue_to => issue1, :relation_type => IssueRelation::TYPE_PRECEDES)
+    IssueRelation.create!(:issue_from => issue3, :issue_to => issue2, :relation_type => IssueRelation::TYPE_PRECEDES)
     issue3.reload
     issue3.parent_issue_id = issue2.id
-    assert !issue3.valid?
-    assert_include 'Parent task is invalid', issue3.errors.full_messages
+    assert issue3.valid?
   end
 
+  # this is to make sure that Defect #8794 is Solved
   def test_setting_parent_should_not_allow_circular_dependency
     set_language_if_valid 'en'
     issue1 = Issue.generate!

@@ -660,7 +660,7 @@ class Issue < ActiveRecord::Base
     elsif @parent_issue
       if !valid_parent_project?(@parent_issue)
         errors.add :parent_issue_id, :invalid
-      elsif (@parent_issue != parent) && (all_dependent_issues.include?(@parent_issue) || @parent_issue.all_dependent_issues.include?(self))
+      elsif (@parent_issue != parent) && (@parent_issue.blocks_or_precedes?(self))
         errors.add :parent_issue_id, :invalid
       elsif !new_record?
         # moving an existing issue
@@ -1130,6 +1130,31 @@ class Issue < ActiveRecord::Base
     dependencies.delete(self)
 
     dependencies
+  end
+
+  # Returns true if this issue blocks or precedes another issue, otherwise returns false
+  def blocks_or_precedes?(other)
+     return true if self == other
+     i_all = [self]
+     i_last = [self]
+     while i_last.length>0 do
+        i_current = []
+        i_last.collect do |i|
+            i.relations_from.find_all {|ir| ir.relation_type == IssueRelation::TYPE_PRECEDES || ir.relation_type == IssueRelation::TYPE_BLOCKS }.
+             collect { |ir| ir.issue_to }.
+             collect { |i| i_current << i if (!i_all.include? i) && (!i_last.include? i) && (!i_current.include? i)}
+        end
+      
+        # collect parents for all of the "last" issues
+        i_last.collect { |i| i_current << Issue.find_by_id(i.parent_issue_id) if !i.parent_issue_id.nil? }
+        
+        return true if i_current.include? other
+        
+        i_last = i_current
+        i_all = i_all.concat(i_last)
+     end    
+     
+     return false
   end
 
   # Returns an array of issues that duplicate this one
